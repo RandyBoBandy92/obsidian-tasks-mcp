@@ -83,7 +83,7 @@ done`;
 
   test('queryTasks should support OR conditions with priorities', () => {
     // OR conditions with priorities
-    const query = `priority is highest or priority is lowest`;
+    const query = `priority is highest OR priority is lowest`;
     
     const extremePriorityTasks = queryTasks(tasks, query);
     expect(extremePriorityTasks.length).toBe(3); // 2 highest + 1 lowest
@@ -95,7 +95,7 @@ done`;
   test('applyFilter should handle complex combinations with priorities', () => {
     // Complex filtering with simpler syntax that our parser can handle
     const query = `not done
-priority is highest or priority is high`;
+priority is highest OR priority is high`;
     
     const complexFilterResults = queryTasks(tasks, query);
     

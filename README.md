@@ -116,6 +116,35 @@ tag include #work
 ```
 This would return all incomplete tasks due before May 1, 2025, that have the #work tag.
 
+### complete_task
+
+Marks a task as complete by updating its status and adding a completion timestamp.
+
+**Input Parameters:**
+- `id` (string, required): The task ID in format "filePath:lineNumber" (e.g., "/path/to/file.md:42")
+
+**Returns:**
+A success or error message indicating whether the task was completed successfully.
+
+**Behavior:**
+- Changes task status from `[ ]` to `[x]`
+- Adds completion timestamp `✅ YYYY-MM-DD` to the end of the task
+- Preserves all existing task metadata (tags, dates, priority, recurrence)
+- Validates that the task ID refers to a valid incomplete task
+- Rejects already completed tasks or invalid task IDs
+
+**Example:**
+```json
+{
+  "id": "/Users/vault/tasks.md:15"
+}
+```
+
+This would complete the task on line 15 of `/Users/vault/tasks.md`, changing it from:
+`- [ ] Complete project report #work` 
+to:
+`- [x] Complete project report #work ✅ 2025-08-05`
+
 ## Usage
 
 ### Installation

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an MCP (Model Context Protocol) server for Obsidian Tasks integration with Claude AI. The server extracts and queries Obsidian-formatted tasks from markdown files, enabling AI-assisted task management. It provides two main MCP tools: `list_all_tasks` and `query_tasks`.
+This is an MCP (Model Context Protocol) server for Obsidian Tasks integration with Claude AI. The server extracts and queries Obsidian-formatted tasks from markdown files, enabling AI-assisted task management. It provides three main MCP tools: `list_all_tasks`, `query_tasks`, and `complete_task`.
 
 ## Common Commands
 
@@ -29,7 +29,7 @@ This is an MCP (Model Context Protocol) server for Obsidian Tasks integration wi
 - Sets up MCP server with stdio transport
 - Handles command-line argument parsing for vault directories
 - Implements security validation for path traversal protection
-- Exports two main tool handlers: `handleListAllTasksRequest` and `handleQueryTasksRequest`
+- Exports three main tool handlers: `handleListAllTasksRequest`, `handleQueryTasksRequest`, and `handleCompleteTaskRequest`
 - Uses glob patterns to find markdown files recursively
 
 **src/TaskParser.ts** - Task parsing and querying engine
@@ -37,6 +37,7 @@ This is an MCP (Model Context Protocol) server for Obsidian Tasks integration wi
 - `TaskRegex` class contains all regex patterns for parsing Obsidian Tasks format
 - `parseTasks()` and `parseTaskLine()` extract tasks from markdown content
 - `queryTasks()` and `applyFilter()` implement the query filtering system
+- `completeTask()` marks tasks as complete by updating markdown files directly
 - Supports complex query syntax with AND/OR logic and various filter types
 
 ### Task Format Support

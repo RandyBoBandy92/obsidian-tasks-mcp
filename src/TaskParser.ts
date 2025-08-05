@@ -212,7 +212,7 @@ export function parseTasks(text: string, filePath: string = ''): Task[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const task = parseTaskLine(line, filePath, i);
+    const task = parseTaskLine(line, filePath, i + 1); // Convert to 1-based line number
     if (task) {
       tasks.push(task);
     }
@@ -560,4 +560,94 @@ export function queryTasks(tasks: Task[], queryText: string): Task[] {
  */
 export function taskToString(task: Task): string {
   return task.originalMarkdown;
+}
+
+/**
+ * Complete a task by updating its status and adding completion date
+ * 
+ * @param id Task ID in format "filePath:lineNumber"
+ * @returns Promise with success status and message
+ */
+export async function completeTask(id: string): Promise<{ success: boolean; message: string }> {
+  try {
+    // Parse the task ID to extract file path and line number
+    const lastColonIndex = id.lastIndexOf(':');
+    if (lastColonIndex === -1) {
+      return { success: false, message: `Invalid task ID format: ${id}. Expected format: filePath:lineNumber` };
+    }
+    
+    const filePath = id.substring(0, lastColonIndex);
+    const lineNumberStr = id.substring(lastColonIndex + 1);
+    const lineNumber = parseInt(lineNumberStr, 10);
+    
+    if (isNaN(lineNumber)) {
+      return { success: false, message: `Invalid line number in task ID: ${lineNumberStr}` };
+    }
+    
+    // Read the file content
+    const fs = await import('fs/promises');
+    let fileContent: string;
+    try {
+      fileContent = await fs.readFile(filePath, 'utf-8');
+    } catch (error) {
+      return { success: false, message: `Failed to read file: ${filePath}. Error: ${error}` };
+    }
+    
+    const lines = fileContent.split('\n');
+    
+    // Check if line number is valid (1-based indexing)
+    if (lineNumber < 1 || lineNumber > lines.length) {
+      return { success: false, message: `Line number ${lineNumber} is out of range for file with ${lines.length} lines` };
+    }
+    
+    const targetLineIndex = lineNumber - 1; // Convert to 0-based indexing
+    const originalLine = lines[targetLineIndex];
+    
+    // Verify this is actually a task line
+    const taskMatch = originalLine.match(TaskRegex.taskRegex);
+    if (!taskMatch) {
+      return { success: false, message: `Line ${lineNumber} is not a valid task: ${originalLine}` };
+    }
+    
+    const statusChar = taskMatch[3];
+    
+    // Check if task is already completed
+    if (['x', 'X'].includes(statusChar)) {
+      return { success: false, message: `Task is already completed: ${originalLine}` };
+    }
+    
+    // Update the task status and add completion date
+    const today = moment().format('YYYY-MM-DD');
+    const completionEmoji = ` ✅ ${today}`;
+    
+    // Replace the status character with 'x' and add completion date
+    let updatedLine = originalLine.replace(TaskRegex.checkboxRegex, '[x]');
+    
+    // Add completion date if not already present
+    if (!updatedLine.includes('✅')) {
+      updatedLine += completionEmoji;
+    }
+    
+    // Update the line in the array
+    lines[targetLineIndex] = updatedLine;
+    
+    // Write the updated content back to the file
+    const updatedContent = lines.join('\n');
+    try {
+      await fs.writeFile(filePath, updatedContent, 'utf-8');
+    } catch (error) {
+      return { success: false, message: `Failed to write file: ${filePath}. Error: ${error}` };
+    }
+    
+    return { 
+      success: true, 
+      message: `Task completed successfully. Updated: ${originalLine} -> ${updatedLine}` 
+    };
+    
+  } catch (error) {
+    return { 
+      success: false, 
+      message: `Unexpected error completing task: ${error}` 
+    };
+  }
 }

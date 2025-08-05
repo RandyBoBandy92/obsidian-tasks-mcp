@@ -113,7 +113,7 @@ done`;
 
   test('queryTasks should support OR conditions with tags', () => {
     // OR conditions with tags
-    const query = `has tag high or has tag project/subtag`;
+    const query = `has tag high OR has tag project/subtag`;
     
     const orTagResults = queryTasks(tasks, query);
     expect(orTagResults.length).toBe(2);

@@ -16,7 +16,13 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { glob } from 'glob';
 
 // Command line argument parsing
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+
+// In test mode, filter out Jest arguments
+if (process.env.NODE_ENV === 'test') {
+  args = args.filter(arg => !arg.startsWith('--') && !arg.includes('.test.'));
+}
+
 if (args.length === 0 && process.env.NODE_ENV !== 'test') {
   console.error("Usage: obsidian-tasks-mcp <vault-directory>");
   process.exit(1);
@@ -112,6 +118,10 @@ export const QueryTasksArgsSchema = z.object({
   query: z.string(),
 });
 
+export const CompleteTaskArgsSchema = z.object({
+  id: z.string(),
+});
+
 const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
 
@@ -130,7 +140,7 @@ const server = new Server(
 
 // Tool implementations
 
-import { parseTasks, queryTasks as filterTasks, taskToString, Task } from './TaskParser.js';
+import { parseTasks, queryTasks as filterTasks, taskToString, Task, completeTask } from './TaskParser.js';
 
 export async function findAllMarkdownFiles(startPath: string): Promise<string[]> {
   const pattern = path.join(startPath, '**/*.md');
@@ -219,6 +229,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "UNSUPPORTED: group by, limit, sort by due/priority, happens before, priority without 'is', lowercase and/or/not. " +
           "Always sorts by urgency unless specified otherwise.",
         inputSchema: zodToJsonSchema(QueryTasksArgsSchema) as ToolInput,
+      },
+      {
+        name: "complete_task",
+        description:
+          "Mark a task as complete by changing its status from incomplete to complete. " +
+          "Takes a task ID in the format 'filePath:lineNumber' (e.g., '/path/to/file.md:42'). " +
+          "Updates the task status from '[ ]' to '[x]' and adds a completion timestamp '✅ YYYY-MM-DD'. " +
+          "Preserves all existing task metadata including tags, dates, priority, and recurrence patterns. " +
+          "The task ID can be obtained from the results of list_all_tasks or query_tasks commands.",
+        inputSchema: zodToJsonSchema(CompleteTaskArgsSchema) as ToolInput,
       }
     ],
   };
@@ -336,6 +356,57 @@ export async function handleQueryTasksRequest(args: any) {
   }
 }
 
+export async function handleCompleteTaskRequest(args: any) {
+  try {
+    const parsed = CompleteTaskArgsSchema.safeParse(args);
+    if (!parsed.success) {
+      throw new Error(`Invalid arguments for complete_task: ${parsed.error}`);
+    }
+    
+    // Extract file path from task ID to validate security
+    const taskId = parsed.data.id;
+    const lastColonIndex = taskId.lastIndexOf(':');
+    if (lastColonIndex === -1) {
+      throw new Error(`Invalid task ID format: ${taskId}. Expected format: filePath:lineNumber`);
+    }
+    
+    const filePath = taskId.substring(0, lastColonIndex);
+    
+    // Validate that the file path is within the vault directory
+    // First, make it relative to vault if it's absolute
+    let relativePath = filePath;
+    if (path.isAbsolute(filePath)) {
+      if (!normalizePath(filePath).startsWith(vaultDirectory)) {
+        throw new Error(`Access denied - file path outside vault directory: ${filePath}`);
+      }
+      relativePath = path.relative(vaultDirectory, filePath);
+    }
+    
+    // Use existing security validation
+    await resolvePath(relativePath);
+    
+    // Complete the task
+    const result = await completeTask(taskId);
+    
+    if (result.success) {
+      return {
+        content: [{ type: "text", text: result.message }],
+      };
+    } else {
+      return {
+        content: [{ type: "text", text: `Error: ${result.message}` }],
+        isError: true,
+      };
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      content: [{ type: "text", text: `Error: ${errorMessage}` }],
+      isError: true,
+    };
+  }
+}
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
@@ -346,6 +417,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     if (name === "query_tasks") {
       return await handleQueryTasksRequest(args);
+    }
+    
+    if (name === "complete_task") {
+      return await handleCompleteTaskRequest(args);
     }
     
     throw new Error(`Unknown tool: ${name}`);

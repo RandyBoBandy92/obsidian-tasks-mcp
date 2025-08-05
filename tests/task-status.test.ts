@@ -123,7 +123,7 @@ not cancelled`;
 
   test('queryTasks should support OR conditions with statuses', () => {
     // OR conditions with statuses
-    const query = `done or cancelled`;
+    const query = `done OR cancelled`;
     
     const doneOrCancelledTasks = queryTasks(tasks, query);
     expect(doneOrCancelledTasks.length).toBe(3); // 2 done + 1 cancelled

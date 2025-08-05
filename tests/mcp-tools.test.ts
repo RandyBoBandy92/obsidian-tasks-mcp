@@ -6,8 +6,10 @@ import path from 'path';
 import { 
   ListAllTasksArgsSchema, 
   QueryTasksArgsSchema,
+  CompleteTaskArgsSchema,
   handleListAllTasksRequest,
-  handleQueryTasksRequest
+  handleQueryTasksRequest,
+  handleCompleteTaskRequest
 } from '../src/index.js';
 
 // Disable server auto-start for tests
@@ -161,5 +163,87 @@ priority is high`
     
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('directory traversal');
+  });
+
+  describe('Complete Task Tests', () => {
+    test('CompleteTaskArgsSchema should validate correctly', () => {
+      // Valid inputs
+      expect(() => CompleteTaskArgsSchema.parse({ id: '/path/file.md:5' })).not.toThrow();
+      expect(() => CompleteTaskArgsSchema.parse({ id: 'tests/test-completion.md:4' })).not.toThrow();
+      
+      // Missing required field should fail
+      expect(() => CompleteTaskArgsSchema.parse({})).toThrow();
+      
+      // Invalid id type should fail
+      expect(() => CompleteTaskArgsSchema.parse({ id: 123 })).toThrow();
+    });
+
+    test('handleCompleteTaskRequest should complete a task', async () => {
+      const fs = await import('fs/promises');
+      const testFile = path.join(process.cwd(), 'tests/test-completion.md');
+      
+      // Read original file content for cleanup
+      const originalContent = await fs.readFile(testFile, 'utf-8');
+      
+      try {
+        // First, get the task ID from our test file
+        const listResult = await handleListAllTasksRequest({ path: 'tests' });
+        const allTasks = JSON.parse(listResult.content[0].text);
+        
+        // Find an incomplete task from our test completion file
+        const incompleteTask = allTasks.find((task: any) => 
+          task.filePath.includes('test-completion.md') && 
+          task.status === 'incomplete' &&
+          task.description.includes('Task to complete #test')
+        );
+        
+        expect(incompleteTask).toBeDefined();
+        const taskId = incompleteTask.id;
+        
+        // Complete the task
+        const result = await handleCompleteTaskRequest({ id: taskId });
+        
+        expect(result.isError).toBeFalsy();
+        expect(result.content[0].text).toContain('Task completed successfully');
+        expect(result.content[0].text).toContain('[x]');
+        expect(result.content[0].text).toContain('✅');
+      } finally {
+        // Always restore original file content
+        await fs.writeFile(testFile, originalContent, 'utf-8');
+      }
+    });
+
+    test('handleCompleteTaskRequest should reject invalid task ID format', async () => {
+      const result = await handleCompleteTaskRequest({ id: 'invalid-format' });
+      
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Invalid task ID format');
+    });
+
+    test('handleCompleteTaskRequest should reject already completed tasks', async () => {
+      // Find an already completed task
+      const listResult = await handleListAllTasksRequest({ path: 'tests' });
+      const allTasks = JSON.parse(listResult.content[0].text);
+      
+      const completedTask = allTasks.find((task: any) => 
+        task.filePath.includes('test-completion.md') && 
+        task.status === 'complete'
+      );
+      
+      expect(completedTask).toBeDefined();
+      const result = await handleCompleteTaskRequest({ id: completedTask.id });
+      
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already completed');
+    });
+
+    test('handleCompleteTaskRequest should reject paths outside vault', async () => {
+      const result = await handleCompleteTaskRequest({ 
+        id: '/etc/passwd:1' 
+      });
+      
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('outside vault directory');
+    });
   });
 });
