@@ -8,6 +8,7 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs/promises";
+import { appendFileSync } from "fs";
 import path from "path";
 import os from 'os';
 import { z } from "zod";
@@ -202,13 +203,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "query_tasks",
         description:
-          "Search for tasks based on Obsidian Tasks query syntax. " +
-          "Allows filtering tasks by status, dates, description, tags, priority, and path. " +
-          "Each line in the query is treated as a filter with AND logic between lines. " +
-          "Returns only tasks that match all query conditions. " +
-          "Examples of task filters are `done`, `not done`, `tag include #foo/bar`, `tag do not include #potato`, `description includes keyword`. " +
-          "The path parameter is optional; if not specified, it defaults to the vault root directory. " +
-          "The path must be relative to the vault directory and cannot contain directory traversal components (..).",
+          "Search for tasks based on Obsidian Tasks query syntax. Each line is a filter with AND logic between lines. " +
+          "SUPPORTED FILTERS: " +
+          "Status: 'done', 'not done', 'cancelled', 'in progress' | " +
+          "Dates: 'due today', 'due before YYYY-MM-DD', 'due after YYYY-MM-DD', 'has due date', 'no due date' | " +
+          "Tags: 'has tags', 'no tags', 'tag includes #tagname', 'has tag #exacttag' | " +
+          "Priority: 'priority is high', 'priority is medium', 'priority is low', 'priority is none' | " +
+          "Path: 'path includes text', 'path does not include text' (excludes files/folders containing text) | " +
+          "Description: 'description includes text' | " +
+          "Urgency: 'urgency above 10', 'urgency below 5' | " +
+          "BOOLEAN OPERATORS (case-sensitive): " +
+          "'filter1 AND filter2' (both must match), 'filter1 OR filter2' (either matches), 'NOT filter' (negates filter) | " +
+          "SUPPORTED SORTING: " +
+          "'sort by urgency' (default), 'sort by urgency reverse' | " +
+          "UNSUPPORTED: group by, limit, sort by due/priority, happens before, priority without 'is', lowercase and/or/not. " +
+          "Always sorts by urgency unless specified otherwise.",
         inputSchema: zodToJsonSchema(QueryTasksArgsSchema) as ToolInput,
       }
     ],
@@ -250,23 +259,76 @@ export async function handleQueryTasksRequest(args: any) {
       throw new Error(`Invalid arguments for query_tasks: ${parsed.error}`);
     }
     
+    // File logging for debugging
+    const debugLog = (msg: string) => {
+      const timestamp = new Date().toISOString();
+      const logMsg = `${timestamp} [DEBUG] ${msg}\n`;
+      console.error(logMsg.trim()); // Still try stderr
+      try {
+        appendFileSync('/tmp/obsidian-mcp-debug.log', logMsg);
+      } catch (e) {
+        // Ignore file errors
+      }
+    };
+    
+    debugLog(`Query received: ${JSON.stringify(parsed.data.query)}`);
+    
     // Use specified path or default to vault root directory
     const relativePath = parsed.data.path || '';
     
     // Validate and resolve the path (even in test mode)
     const validPath = await resolvePath(relativePath);
+    debugLog(`Scanning path: ${validPath}`);
     
     // Get all tasks from the directory
     const allTasks = await findAllTasks(validPath);
+    debugLog(`Found ${allTasks.length} total tasks`);
     
     // Apply the query to filter tasks
     const filteredTasks = queryTasks(allTasks, parsed.data.query);
+    debugLog(`After filtering: ${filteredTasks.length} tasks`);
+    
+    // Debug: Check task size
+    if (filteredTasks.length > 0) {
+      const sampleTask = JSON.stringify(filteredTasks[0], null, 2);
+      debugLog(`Sample task size: ${sampleTask.length} chars`);
+      debugLog(`Average task size: ${Math.ceil(JSON.stringify(filteredTasks).length / filteredTasks.length)} chars`);
+    }
+    
+    // Check token size and truncate if needed
+    let responseText = serializeTasksToJson(filteredTasks);
+    let tokenCount = Math.ceil(responseText.length / 3.5); // More accurate token estimate
+    debugLog(`Response size: ${responseText.length} chars (~${tokenCount} tokens)`);
+    
+    // Truncate if response is too large (keep under 15k tokens to be very safe)
+    if (tokenCount > 15000) {
+      const maxTasks = Math.floor(filteredTasks.length * 15000 / tokenCount);
+      const truncatedTasks = filteredTasks.slice(0, maxTasks);
+      responseText = serializeTasksToJson(truncatedTasks);
+      const newTokenCount = Math.ceil(responseText.length / 3.5);
+      debugLog(`Truncated to ${truncatedTasks.length} tasks (~${newTokenCount} tokens)`);
+      
+      // Add truncation notice
+      const truncationNotice = `--- RESPONSE TRUNCATED ---\nShowing ${truncatedTasks.length} of ${filteredTasks.length} matching tasks to stay within token limits.\nUse more specific filters to see all results.`;
+      responseText = responseText.slice(0, -1) + ',' + JSON.stringify({
+        id: "truncation-notice",
+        description: truncationNotice,
+        status: "note",
+        statusSymbol: "!",
+        filePath: "",
+        lineNumber: 0,
+        tags: [],
+        urgency: 0,
+        originalMarkdown: ""
+      }) + ']';
+    }
     
     return {
-      content: [{ type: "text", text: serializeTasksToJson(filteredTasks) }],
+      content: [{ type: "text", text: responseText }],
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[DEBUG] Error in handleQueryTasksRequest: ${errorMessage}`);
     return {
       content: [{ type: "text", text: `Error: ${errorMessage}` }],
       isError: true,

@@ -22,6 +22,7 @@ export interface Task {
   startDate?: string;
   priority?: string;
   recurrence?: string;
+  urgency: number;
   originalMarkdown: string;
 }
 
@@ -67,6 +68,135 @@ export class TaskRegex {
   
   // Recurrence
   static readonly recurrenceRegex = /🔁\s?(.*?)(?=(\s|$))/;
+}
+
+/**
+ * Calculate urgency score for a task using Obsidian Tasks formula
+ * Formula: Due Date Score + Priority Score + Scheduled Date Score + Start Date Score
+ */
+export function calculateUrgency(task: Partial<Task>): number {
+  let urgencyScore = 0;
+  
+  // Due Date Score (strongest influence)
+  if (task.dueDate) {
+    const today = moment();
+    const dueDate = moment(task.dueDate);
+    
+    if (dueDate.isValid()) {
+      const daysDiff = dueDate.diff(today, 'days');
+      
+      if (daysDiff <= -7) {
+        // Due 7+ days ago
+        urgencyScore += 12.0;
+      } else if (daysDiff === -7) {
+        // Due 7 days ago
+        urgencyScore += 12.0;
+      } else if (daysDiff === -6) {
+        urgencyScore += 11.54286;
+      } else if (daysDiff === -5) {
+        urgencyScore += 11.08571;
+      } else if (daysDiff === -4) {
+        urgencyScore += 10.62857;
+      } else if (daysDiff === -3) {
+        urgencyScore += 10.17143;
+      } else if (daysDiff === -2) {
+        urgencyScore += 9.71429;
+      } else if (daysDiff === -1) {
+        urgencyScore += 9.25714;
+      } else if (daysDiff === 0) {
+        // Due today
+        urgencyScore += 8.8;
+      } else if (daysDiff === 1) {
+        urgencyScore += 8.34286;
+      } else if (daysDiff === 2) {
+        urgencyScore += 7.88571;
+      } else if (daysDiff === 3) {
+        urgencyScore += 7.42857;
+      } else if (daysDiff === 4) {
+        urgencyScore += 6.97143;
+      } else if (daysDiff === 5) {
+        urgencyScore += 6.51429;
+      } else if (daysDiff === 6) {
+        urgencyScore += 6.05714;
+      } else if (daysDiff === 7) {
+        urgencyScore += 5.6;
+      } else if (daysDiff === 8) {
+        urgencyScore += 5.14286;
+      } else if (daysDiff === 9) {
+        urgencyScore += 4.68571;
+      } else if (daysDiff === 10) {
+        urgencyScore += 4.22857;
+      } else if (daysDiff === 11) {
+        urgencyScore += 3.77143;
+      } else if (daysDiff === 12) {
+        urgencyScore += 3.31429;
+      } else if (daysDiff === 13) {
+        urgencyScore += 2.85714;
+      } else if (daysDiff === 14) {
+        urgencyScore += 2.4;
+      } else if (daysDiff > 14) {
+        // More than 14 days until due
+        urgencyScore += 2.4;
+      }
+    }
+  }
+  
+  // Priority Score
+  switch (task.priority) {
+    case 'highest':
+      urgencyScore += 9.0;
+      break;
+    case 'high':
+      urgencyScore += 6.0;
+      break;
+    case 'medium':
+      urgencyScore += 3.9;
+      break;
+    case 'low':
+      urgencyScore += 0.0;
+      break;
+    case 'lowest':
+      urgencyScore += -1.8;
+      break;
+    default:
+      // None/undefined priority
+      urgencyScore += 1.95;
+      break;
+  }
+  
+  // Scheduled Date Score
+  if (task.scheduledDate) {
+    const today = moment();
+    const scheduledDate = moment(task.scheduledDate);
+    
+    if (scheduledDate.isValid()) {
+      if (scheduledDate.isSameOrBefore(today, 'day')) {
+        // Today or earlier
+        urgencyScore += 5.0;
+      } else {
+        // Tomorrow or later
+        urgencyScore += 0.0;
+      }
+    }
+  }
+  
+  // Start Date Score
+  if (task.startDate) {
+    const today = moment();
+    const startDate = moment(task.startDate);
+    
+    if (startDate.isValid()) {
+      if (startDate.isSameOrBefore(today, 'day')) {
+        // Today or earlier
+        urgencyScore += 0.0;
+      } else {
+        // Tomorrow or later
+        urgencyScore += -3.0;
+      }
+    }
+  }
+  
+  return urgencyScore;
 }
 
 /**
@@ -119,13 +249,14 @@ export function parseTaskLine(line: string, filePath: string = '', lineNumber: n
   let priority = undefined;
   
   // Use regex to find all priority markers in order of appearance
-  const priorityMatches = description.match(/⏫⏫|⏫|🔼|🔽|⏬/g);
+  const priorityMatches = description.match(/🔺|⏫⏫|⏫|🔼|🔽|⏬/g);
   
   if (priorityMatches && priorityMatches.length > 0) {
     // Use the first priority marker found
     const firstPriority = priorityMatches[0];
     
-    if (firstPriority === '⏫⏫') priority = 'highest';
+    if (firstPriority === '🔺') priority = 'highest';
+    else if (firstPriority === '⏫⏫') priority = 'highest';
     else if (firstPriority === '⏫') priority = 'high';
     else if (firstPriority === '🔼') priority = 'medium';
     else if (firstPriority === '🔽') priority = 'low';
@@ -164,8 +295,12 @@ export function parseTaskLine(line: string, filePath: string = '', lineNumber: n
     createdDate: createdMatch ? createdMatch[1] : undefined,
     priority,
     recurrence: recurrenceMatch ? recurrenceMatch[1] : undefined,
+    urgency: 0, // Will be calculated below
     originalMarkdown: line
   };
+  
+  // Calculate urgency score
+  task.urgency = calculateUrgency(task);
   
   return task;
 }
@@ -174,42 +309,39 @@ export function parseTaskLine(line: string, filePath: string = '', lineNumber: n
  * Apply a filter function to a task
  */
 export function applyFilter(task: Task, filter: string): boolean {
+  const originalFilter = filter.trim();
   filter = filter.toLowerCase().trim();
   
-  // Boolean combinations with AND, OR, NOT
-  if (filter.includes(' AND ')) {
-    const parts = filter.split(' AND ');
+  // Boolean combinations with AND, OR, NOT (case-sensitive)
+  if (originalFilter.includes(' AND ')) {
+    const parts = originalFilter.split(' AND ');
     return parts.every(part => applyFilter(task, part.trim()));
   }
   
-  if (filter.includes(' OR ')) {
-    const parts = filter.split(' OR ');
+  if (originalFilter.includes(' OR ')) {
+    const parts = originalFilter.split(' OR ');
     return parts.some(part => applyFilter(task, part.trim()));
   }
   
-  // Case insensitive versions
-  if (filter.includes(' and ')) {
-    const parts = filter.split(' and ');
-    return parts.every(part => applyFilter(task, part.trim()));
-  }
-  
-  if (filter.includes(' or ')) {
-    const parts = filter.split(' or ');
-    return parts.some(part => applyFilter(task, part.trim()));
-  }
-  
-  if (filter.startsWith('not ')) {
-    const subFilter = filter.substring(4);
+  if (originalFilter.startsWith('NOT ')) {
+    const subFilter = originalFilter.substring(4);
     return !applyFilter(task, subFilter);
   }
   
-  // Status-based filters
-  if (filter === 'done') {
-    return task.status === 'complete';
-  }
+  // Status-based filters (handle specific cases first)
   if (filter === 'not done') {
     // Not done should only include tasks that are truly active (incomplete or in progress)
     return task.status === 'incomplete' || task.status === 'in_progress';
+  }
+  
+  if (filter === 'done') {
+    return task.status === 'complete';
+  }
+  
+  // Generic not handler (after specific cases)
+  if (filter.startsWith('not ')) {
+    const subFilter = filter.substring(4);
+    return !applyFilter(task, subFilter);
   }
   if (filter === 'cancelled') {
     return task.status === 'cancelled';
@@ -331,28 +463,83 @@ export function applyFilter(task: Task, filter: string): boolean {
     }
   }
   
+  // Urgency filters
+  if (filter.startsWith('urgency above')) {
+    const threshold = parseFloat(filter.split('urgency above')[1].trim());
+    return !isNaN(threshold) && task.urgency > threshold;
+  }
+  
+  if (filter.startsWith('urgency below')) {
+    const threshold = parseFloat(filter.split('urgency below')[1].trim());
+    return !isNaN(threshold) && task.urgency < threshold;
+  }
+  
+  if (filter.startsWith('urgency is')) {
+    const value = parseFloat(filter.split('urgency is')[1].trim());
+    return !isNaN(value) && Math.abs(task.urgency - value) < 0.001; // Small tolerance for floating point comparison
+  }
+  
   // If no filter match, check if description contains the filter text
   return task.description.toLowerCase().includes(filter);
 }
 
 /**
- * Parse a query string into a set of filter lines
+ * Parse a query string into filters and sort commands
  */
-export function parseQuery(queryText: string): string[] {
-  // Split into lines and remove empty ones and comments
-  return queryText.split('\n')
+export function parseQuery(queryText: string): { filters: string[], sortCommands: string[] } {
+  const lines = queryText.split('\n')
     .map(line => line.trim())
     .filter(line => line && !line.startsWith('#'));
+  
+  const filters: string[] = [];
+  const sortCommands: string[] = [];
+  
+  for (const line of lines) {
+    if (line.toLowerCase().startsWith('sort by')) {
+      sortCommands.push(line);
+    } else {
+      filters.push(line);
+    }
+  }
+  
+  return { filters, sortCommands };
+}
+
+/**
+ * Apply sorting to a list of tasks
+ */
+export function applySorting(tasks: Task[], sortCommands: string[]): Task[] {
+  if (sortCommands.length === 0) {
+    // Default sorting by urgency descending
+    return tasks.sort((a, b) => b.urgency - a.urgency);
+  }
+  
+  let sortedTasks = [...tasks];
+  
+  // Apply sort commands in reverse order for proper precedence
+  for (let i = sortCommands.length - 1; i >= 0; i--) {
+    const command = sortCommands[i].toLowerCase().trim();
+    
+    if (command === 'sort by urgency' || command === 'sort by urgency reverse') {
+      const reverse = command.includes('reverse');
+      sortedTasks = sortedTasks.sort((a, b) => {
+        return reverse ? a.urgency - b.urgency : b.urgency - a.urgency;
+      });
+    }
+    // Future: Add more sort options like 'sort by due date', 'sort by priority', etc.
+  }
+  
+  return sortedTasks;
 }
 
 /**
  * Apply a query to a list of tasks
  */
 export function queryTasks(tasks: Task[], queryText: string): Task[] {
-  const filters = parseQuery(queryText);
+  const { filters, sortCommands } = parseQuery(queryText);
   
   // Apply all filters in sequence (AND logic between lines)
-  return tasks.filter(task => {
+  let filteredTasks = tasks.filter(task => {
     for (const filter of filters) {
       if (!applyFilter(task, filter)) {
         return false;
@@ -360,6 +547,9 @@ export function queryTasks(tasks: Task[], queryText: string): Task[] {
     }
     return true;
   });
+  
+  // Apply sorting
+  return applySorting(filteredTasks, sortCommands);
 }
 
 /**

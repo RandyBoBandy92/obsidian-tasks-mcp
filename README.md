@@ -63,7 +63,9 @@ A JSON array of task objects that match the query, with the same structure as `l
 
 - Status filters:
   - `done` - Show completed tasks
-  - `not done` - Show incomplete tasks
+  - `not done` - Show incomplete tasks (excludes cancelled)
+  - `cancelled` - Show cancelled tasks
+  - `in progress` - Show in-progress tasks
 
 - Date filters:
   - `due today` - Tasks due today
@@ -80,7 +82,7 @@ A JSON array of task objects that match the query, with the same structure as `l
 
 - Path filters:
   - `path includes string` - Tasks in files with paths containing "string"
-  - `path does not include string` - Tasks in files with paths not containing "string"
+  - `path does not include string` - Tasks in files with paths not containing "string" (excludes subdirectories)
 
 - Description filters:
   - `description includes string` - Tasks with descriptions containing "string"
@@ -91,6 +93,20 @@ A JSON array of task objects that match the query, with the same structure as `l
   - `priority is medium` - Tasks with medium priority
   - `priority is low` - Tasks with low priority
   - `priority is none` - Tasks with no priority
+
+- Urgency filters:
+  - `urgency above 10` - Tasks with urgency score above 10
+  - `urgency below 5` - Tasks with urgency score below 5
+  - `urgency is 8.8` - Tasks with specific urgency score
+
+- Boolean operators (case-sensitive):
+  - `filter1 AND filter2` - Both conditions must match
+  - `filter1 OR filter2` - Either condition can match
+  - `NOT filter` - Negates the filter condition
+
+- Sorting:
+  - `sort by urgency` - Sort by urgency descending (default)
+  - `sort by urgency reverse` - Sort by urgency ascending
 
 **Example Query:**
 ```
@@ -156,6 +172,36 @@ npm test
 ```
 
 See [TESTING.md](TESTING.md) for detailed information about the test suite.
+
+### Debugging
+
+The MCP server provides debug logging to help troubleshoot query processing:
+
+#### Debug Logs
+
+Monitor debug output in real-time:
+
+```bash
+# Watch debug logs (file logging)
+tail -f /tmp/obsidian-mcp-debug.log
+```
+
+Debug logs include:
+- Query received and parsed
+- Directory scanning progress  
+- Task counts (total found, after filtering)
+- Response size and token estimates
+- Truncation information when responses exceed limits
+
+#### MCP Inspector
+
+Use the official MCP Inspector for interactive debugging:
+
+```bash
+npx @modelcontextprotocol/inspector node dist/index.js /path/to/vault
+```
+
+This provides a visual interface to test tools and see all debug output.
 
 ### Using with Claude
 
