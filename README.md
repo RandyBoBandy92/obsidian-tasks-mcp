@@ -130,6 +130,9 @@ A success or error message indicating whether the task was completed successfull
 - Changes task status from `[ ]` to `[x]`
 - Adds completion timestamp `✅ YYYY-MM-DD` to the end of the task
 - Preserves all existing task metadata (tags, dates, priority, recurrence)
+- **Recurring Tasks**: If task has recurrence rule, creates new occurrence below completed task
+- **Date Calculation**: "When done" tasks use completion date; others use original task date
+- **Date Relationships**: Maintains relative spacing between start/scheduled/due dates
 - Validates that the task ID refers to a valid incomplete task
 - Rejects already completed tasks or invalid task IDs
 
@@ -144,6 +147,13 @@ This would complete the task on line 15 of `/Users/vault/tasks.md`, changing it 
 `- [ ] Complete project report #work` 
 to:
 `- [x] Complete project report #work ✅ 2025-08-05`
+
+**Recurring Task Example:**
+If the task has a recurrence rule like `- [ ] Weekly review 🔁 every week 📅 2025-08-05`, completion would result in:
+```
+- [x] Weekly review 🔁 every week 📅 2025-08-05 ✅ 2025-08-05
+- [ ] Weekly review 🔁 every week 📅 2025-08-12
+```
 
 ## Usage
 
@@ -313,10 +323,15 @@ The server recognizes the following Obsidian Tasks format:
 - Start date: `🛫 YYYY-MM-DD`
 - Created date: `➕ YYYY-MM-DD`
 - Priority: `⏫` (high), `🔼` (medium), `🔽` (low)
-- Recurrence: `🔁 every day/week/month/etc.`
+- Recurrence: 
+  - Basic patterns: `🔁 every day`, `🔁 every 2 weeks`, `🔁 every month`
+  - When done: `🔁 every day when done` (schedules from completion date)
+  - Complex patterns: `🔁 every weekday`, `🔁 every month on the last Friday`
 - Tags: `#tag1 #tag2`
 
 Example task: `- [ ] Complete project report 🗓️ 2025-05-01 ⏳ 2025-04-25 #work #report ⏫`
+
+Example recurring task: `- [ ] Weekly team meeting 🔁 every week 📅 2025-08-05 #work`
 
 ## License
 

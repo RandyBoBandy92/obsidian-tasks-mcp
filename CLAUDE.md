@@ -37,7 +37,9 @@ This is an MCP (Model Context Protocol) server for Obsidian Tasks integration wi
 - `TaskRegex` class contains all regex patterns for parsing Obsidian Tasks format
 - `parseTasks()` and `parseTaskLine()` extract tasks from markdown content
 - `queryTasks()` and `applyFilter()` implement the query filtering system
-- `completeTask()` marks tasks as complete by updating markdown files directly
+- `completeTask()` marks tasks as complete by updating markdown files directly and handles recurring tasks
+- `RecurrenceUtils` class provides comprehensive recurring task functionality with date calculations
+- `TaskSerializer` class for proper task serialization using Obsidian Tasks approach
 - Supports complex query syntax with AND/OR logic and various filter types
 
 ### Task Format Support
@@ -90,15 +92,36 @@ Supports sorting by:
 - All paths resolved and validated against vault directory
 - Symlink validation ensures targets stay within allowed directories
 
+### Recurring Tasks Support
+Implements comprehensive recurring task functionality based on Obsidian Tasks:
+- **Pattern Classification**: Automatically classifies recurrence patterns as simple or complex
+- **Simple Patterns**: Uses direct date arithmetic for patterns like `every X days/weeks/months/years`
+- **Complex Patterns**: Uses RRule library for advanced patterns like `every weekday`, `every month on last Friday`
+- **"When Done" Logic**: Tasks with `when done` modifier schedule next occurrence from completion date
+- **Original Date Logic**: Standard recurring tasks schedule from original due/scheduled/start date
+- **Date Relationship Preservation**: Maintains relative distances between start/scheduled/due dates
+- **Below Placement**: New recurring task instances appear below the completed task
+- **Invalid Date Handling**: Moves backwards to valid dates (e.g., Feb 31 → Feb 28)
+
+### Task Completion with Recurrence
+When completing a recurring task via `complete_task`:
+1. Original task is marked complete with ✅ timestamp
+2. If task has recurrence rule, calculates next occurrence
+3. New task instance inserted below completed task with updated dates
+4. All metadata (priority, tags, recurrence) preserved in new instance
+5. Proper indentation and formatting maintained
+
 ### Testing Architecture
 - Jest-based test suite with ES modules support
 - Test environment uses `NODE_ENV=test` to disable server startup
 - Test vault in `tests/test-vault/` with sample markdown files
+- Special Jest configuration for RRule module transformation
 - Separate test files for different functionality areas:
   - `task-extraction.test.ts` - File parsing
   - `task-parsing.test.ts` - Task parsing logic
   - `task-query.test.ts` - Query filtering
   - `mcp-tools.test.ts` - MCP tool handlers
+  - `task-recurrence.test.ts` - Recurring task functionality
 
 ## Debugging
 
@@ -141,6 +164,7 @@ This provides a visual interface to test MCP tools and see all debug output.
 - `chrono-node`, `moment` - Date parsing and manipulation
 - `glob` - File pattern matching for markdown discovery
 - `minimatch` - Path pattern matching
+- `rrule` - Recurrence rule parsing for complex recurring tasks
 - `obsidian` - Type definitions (dev dependency)
 
 ### Project Structure
