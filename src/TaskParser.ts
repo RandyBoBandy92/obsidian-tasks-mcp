@@ -6,8 +6,10 @@
  */
 
 import moment from 'moment';
-import * as rruleModule from 'rrule';
-const RRule = rruleModule.RRule;
+import * as rrulePkg from 'rrule';
+import { appendFileSync } from 'fs';
+// Workaround for rrule's ESM/CommonJS compatibility issues
+const { RRule } = (rrulePkg as any).default || rrulePkg;
 type RRuleType = InstanceType<typeof RRule>;
 
 // Interface for our task object
@@ -366,12 +368,26 @@ export class RecurrenceUtils {
    * Convert Obsidian Tasks recurrence rule to RRule
    */
   static obsidianToRRule(rule: string, referenceDate: Date): RRuleType | null {
+    const debugLog = (msg: string) => {
+      const timestamp = new Date().toISOString();
+      const logMsg = `${timestamp} [RECURRENCE_CALC] ${msg}\n`;
+      console.error(logMsg.trim());
+      try {
+        appendFileSync('/tmp/obsidian-mcp-debug.log', logMsg);
+      } catch (e) {
+        // Ignore file errors
+      }
+    };
+    
     try {
       const lowerRule = rule.toLowerCase();
+      debugLog(`obsidianToRRule - RRule object: ${typeof RRule}, RRule available: ${RRule !== undefined}`);
+      debugLog(`obsidianToRRule - RRule.SU available: ${RRule && RRule.SU !== undefined}`);
       
       // Handle basic patterns
       if (lowerRule.startsWith('every ')) {
         const pattern = lowerRule.substring(6); // Remove 'every '
+        debugLog(`Extracted pattern after removing 'every ': "${pattern}"`);
         
         // Daily patterns
         if (pattern === 'day') {
@@ -415,13 +431,56 @@ export class RecurrenceUtils {
           });
         }
         
-        // Weekly with specific days
-        if (pattern.startsWith('week on ')) {
-          const daysPart = pattern.substring(8); // Remove 'week on '
-          const weekdays = RecurrenceUtils.parseWeekdays(daysPart);
+        // Weekly with specific days (handles "week on Tuesday, Friday" and "X weeks on Friday")
+        if (pattern.includes(' on ') && (pattern.includes('week') || pattern.includes('weeks'))) {
+          let weekdays: any[] = [];
+          let interval = 1;
+          
+          debugLog(`Checking weekly pattern with specific days: "${pattern}"`);
+          
+          // Inline weekday parsing helper (RRule is now properly imported)
+          const parseWeekdaysInline = (dayString: string): any[] => {
+            const dayMap: { [key: string]: any } = {
+              sunday: RRule.SU,
+              monday: RRule.MO,
+              tuesday: RRule.TU,
+              wednesday: RRule.WE,
+              thursday: RRule.TH,
+              friday: RRule.FR,
+              saturday: RRule.SA
+            };
+            
+            const days = dayString.toLowerCase().split(',').map(d => d.trim());
+            const result: any[] = [];
+            
+            for (const day of days) {
+              if (dayMap[day]) {
+                result.push(dayMap[day]);
+              }
+            }
+            
+            return result;
+          };
+
+          // Handle "X weeks on day" pattern
+          const weeksOnMatch = pattern.match(/^(\d+) weeks? on (.+)$/);
+          if (weeksOnMatch) {
+            interval = parseInt(weeksOnMatch[1]);
+            weekdays = parseWeekdaysInline(weeksOnMatch[2]);
+            debugLog(`Matched "X weeks on day" pattern: interval=${interval}, days="${weeksOnMatch[2]}"`);
+          } else if (pattern.startsWith('week on ')) {
+            // Handle "week on day(s)" pattern
+            const daysPart = pattern.substring(8); // Remove 'week on '
+            weekdays = parseWeekdaysInline(daysPart);
+            debugLog(`Matched "week on days" pattern: days="${daysPart}"`);
+          }
+          
+          debugLog(`Parsed weekdays: ${weekdays.length} found`);
           if (weekdays.length > 0) {
+            debugLog(`Creating RRule with WEEKLY freq, interval=${interval}, byweekday=${weekdays.length} days`);
             return new RRule({
               freq: RRule.WEEKLY,
+              interval,
               byweekday: weekdays,
               dtstart: referenceDate
             });
@@ -465,6 +524,52 @@ export class RecurrenceUtils {
           }
         }
         
+        // Handle "month on the last [weekday]" patterns
+        if (pattern.match(/^month on the last (sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)) {
+          const weekdayMatch = pattern.match(/last (sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/);
+          if (weekdayMatch) {
+            const dayMap: { [key: string]: any } = {
+              sunday: RRule.SU,
+              monday: RRule.MO,
+              tuesday: RRule.TU,
+              wednesday: RRule.WE,
+              thursday: RRule.TH,
+              friday: RRule.FR,
+              saturday: RRule.SA
+            };
+            const weekday = dayMap[weekdayMatch[1]];
+            debugLog(`Parsed "last ${weekdayMatch[1]}" monthly pattern`);
+            return new RRule({
+              freq: RRule.MONTHLY,
+              byweekday: [weekday.nth(-1)], // Last occurrence of weekday in month
+              dtstart: referenceDate
+            });
+          }
+        }
+        
+        // Handle "month on the 2nd last [weekday]" patterns  
+        if (pattern.match(/^month on the 2nd last (sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/)) {
+          const weekdayMatch = pattern.match(/2nd last (sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/);
+          if (weekdayMatch) {
+            const dayMap: { [key: string]: any } = {
+              sunday: RRule.SU,
+              monday: RRule.MO,
+              tuesday: RRule.TU,
+              wednesday: RRule.WE,
+              thursday: RRule.TH,
+              friday: RRule.FR,
+              saturday: RRule.SA
+            };
+            const weekday = dayMap[weekdayMatch[1]];
+            debugLog(`Parsed "2nd last ${weekdayMatch[1]}" monthly pattern`);
+            return new RRule({
+              freq: RRule.MONTHLY,
+              byweekday: [weekday.nth(-2)], // 2nd to last occurrence of weekday in month
+              dtstart: referenceDate
+            });
+          }
+        }
+        
         // Yearly patterns
         if (pattern === 'year') {
           return new RRule({
@@ -503,6 +608,10 @@ export class RecurrenceUtils {
    * Parse weekday names to RRule weekday constants
    */
   private static parseWeekdays(dayString: string): any[] {
+    console.log('parseWeekdays called with:', dayString);
+    console.log('RRule object:', typeof RRule, RRule);
+    console.log('RRule.SU:', RRule.SU);
+    
     const dayMap: { [key: string]: any } = {
       sunday: RRule.SU,
       monday: RRule.MO,
@@ -551,45 +660,79 @@ export class RecurrenceUtils {
    * Calculate the next occurrence of a recurring task
    */
   static calculateNextOccurrence(task: Task, completionDate?: Date): Task | null {
-    if (!task.recurrence) return null;
+    // Setup debug logging for recurrence calculation
+    const debugLog = (msg: string) => {
+      const timestamp = new Date().toISOString();
+      const logMsg = `${timestamp} [RECURRENCE_CALC] ${msg}\n`;
+      console.error(logMsg.trim());
+      try {
+        appendFileSync('/tmp/obsidian-mcp-debug.log', logMsg);
+      } catch (e) {
+        // Ignore file errors
+      }
+    };
+
+    debugLog(`Starting calculateNextOccurrence for task: "${task.description}"`);
+    debugLog(`Task recurrence rule: "${task.recurrence || 'none'}"`);
+    debugLog(`Completion date provided: ${completionDate ? completionDate.toISOString() : 'none'}`);
+    
+    if (!task.recurrence) {
+      debugLog(`No recurrence rule found, returning null`);
+      return null;
+    }
     
     const { rule, whenDone } = RecurrenceUtils.parseRecurrenceRule(task.recurrence);
+    debugLog(`Parsed recurrence rule - Rule: "${rule}", When done: ${whenDone}`);
     
     // Determine reference date based on "when done" flag
     let referenceDate: Date;
     if (whenDone && completionDate) {
       referenceDate = completionDate;
+      debugLog(`Using completion date as reference (when done): ${referenceDate.toISOString()}`);
     } else {
       const taskReferenceDate = RecurrenceUtils.getReferenceDate(task);
       if (!taskReferenceDate) {
+        debugLog(`No reference date found in task, returning null`);
         return null;
       }
       referenceDate = taskReferenceDate;
+      debugLog(`Using task reference date: ${referenceDate.toISOString()}`);
     }
     
     // Classify pattern and calculate next occurrence
     let nextDate: Date;
     const patternType = RecurrenceUtils.classifyPattern(rule);
+    debugLog(`Pattern classified as: ${patternType}`);
     
     if (patternType === 'simple') {
       const simplePattern = RecurrenceUtils.parseSimplePattern(rule);
       if (!simplePattern) {
+        debugLog(`Failed to parse simple pattern: "${rule}"`);
         return null;
       }
+      debugLog(`Simple pattern parsed - Interval: ${simplePattern.interval}, Unit: ${simplePattern.unit}`);
       nextDate = RecurrenceUtils.calculateSimpleNextOccurrence(simplePattern, referenceDate);
+      debugLog(`Simple calculation result: ${nextDate.toISOString()}`);
     } else {
+      debugLog(`Using RRule for complex pattern: "${rule}"`);
       // Use RRule for complex patterns
       const rrule = RecurrenceUtils.obsidianToRRule(rule, referenceDate);
       if (!rrule) {
+        debugLog(`Failed to convert to RRule: "${rule}"`);
         return null;
       }
+      debugLog(`RRule created successfully: ${rrule.toString()}`);
       
       const rruleNext = rrule.after(referenceDate);
       if (!rruleNext) {
+        debugLog(`RRule.after() returned null - no next occurrence found`);
         return null;
       }
       nextDate = rruleNext;
+      debugLog(`RRule calculation result: ${nextDate.toISOString()}`);
     }
+    
+    debugLog(`Creating new task with base properties from original task`);
     
     // Create new task with updated dates
     const newTask: Task = {
@@ -600,101 +743,139 @@ export class RecurrenceUtils {
       originalMarkdown: '' // Will be built below
     };
     
+    debugLog(`Base new task created with ID: ${newTask.id}`);
+    
     // Update dates based on recurrence logic
     if (whenDone && completionDate) {
+      debugLog(`Processing "when done" recurrence logic`);
       // For "when done" tasks, nextDate is already completion date + interval
       // Set nextDate as the primary date and maintain relative relationships
       const primaryDateField = RecurrenceUtils.getPrimaryDateField(task);
+      debugLog(`Primary date field for task: ${primaryDateField || 'none'}`);
       
       if (primaryDateField === 'dueDate') {
+        debugLog(`Setting due date as primary field for "when done" task`);
         const nextDateMoment = moment.utc(nextDate);
         newTask.dueDate = nextDateMoment.format('YYYY-MM-DD');
+        debugLog(`New due date set to: ${newTask.dueDate}`);
         
         // Maintain relative relationships if other dates exist
         if (task.scheduledDate && task.dueDate) {
           const scheduledOffset = moment(task.scheduledDate).diff(moment(task.dueDate), 'days');
+          debugLog(`Scheduled date offset from due date: ${scheduledOffset} days`);
           const newScheduled = moment(nextDate).add(scheduledOffset, 'days');
           newTask.scheduledDate = moment(RecurrenceUtils.ensureValidDate(newScheduled.toDate())).format('YYYY-MM-DD');
+          debugLog(`New scheduled date calculated: ${newTask.scheduledDate}`);
         }
         
         if (task.startDate && task.dueDate) {
           const startOffset = moment(task.startDate).diff(moment(task.dueDate), 'days');
+          debugLog(`Start date offset from due date: ${startOffset} days`);
           const newStart = moment(nextDate).add(startOffset, 'days');
           newTask.startDate = moment(RecurrenceUtils.ensureValidDate(newStart.toDate())).format('YYYY-MM-DD');
+          debugLog(`New start date calculated: ${newTask.startDate}`);
         }
       } else if (primaryDateField === 'scheduledDate') {
+        debugLog(`Setting scheduled date as primary field for "when done" task`);
         newTask.scheduledDate = moment(nextDate).format('YYYY-MM-DD');
+        debugLog(`New scheduled date set to: ${newTask.scheduledDate}`);
         
         if (task.dueDate && task.scheduledDate) {
           const dueOffset = moment(task.dueDate).diff(moment(task.scheduledDate), 'days');
+          debugLog(`Due date offset from scheduled date: ${dueOffset} days`);
           const newDue = moment(nextDate).add(dueOffset, 'days');
           newTask.dueDate = moment(RecurrenceUtils.ensureValidDate(newDue.toDate())).format('YYYY-MM-DD');
+          debugLog(`New due date calculated: ${newTask.dueDate}`);
         }
         
         if (task.startDate && task.scheduledDate) {
           const startOffset = moment(task.startDate).diff(moment(task.scheduledDate), 'days');
+          debugLog(`Start date offset from scheduled date: ${startOffset} days`);
           const newStart = moment(nextDate).add(startOffset, 'days');
           newTask.startDate = moment(RecurrenceUtils.ensureValidDate(newStart.toDate())).format('YYYY-MM-DD');
+          debugLog(`New start date calculated: ${newTask.startDate}`);
         }
       } else if (primaryDateField === 'startDate') {
+        debugLog(`Setting start date as primary field for "when done" task`);
         newTask.startDate = moment(nextDate).format('YYYY-MM-DD');
+        debugLog(`New start date set to: ${newTask.startDate}`);
         
         if (task.dueDate && task.startDate) {
           const dueOffset = moment(task.dueDate).diff(moment(task.startDate), 'days');
+          debugLog(`Due date offset from start date: ${dueOffset} days`);
           const newDue = moment(nextDate).add(dueOffset, 'days');
           newTask.dueDate = moment(RecurrenceUtils.ensureValidDate(newDue.toDate())).format('YYYY-MM-DD');
+          debugLog(`New due date calculated: ${newTask.dueDate}`);
         }
         
         if (task.scheduledDate && task.startDate) {
           const scheduledOffset = moment(task.scheduledDate).diff(moment(task.startDate), 'days');
+          debugLog(`Scheduled date offset from start date: ${scheduledOffset} days`);
           const newScheduled = moment(nextDate).add(scheduledOffset, 'days');
           newTask.scheduledDate = moment(RecurrenceUtils.ensureValidDate(newScheduled.toDate())).format('YYYY-MM-DD');
+          debugLog(`New scheduled date calculated: ${newTask.scheduledDate}`);
         }
       } else {
+        debugLog(`No primary date field found, defaulting to due date`);
         // No primary date field, default to due date
         newTask.dueDate = moment(nextDate).format('YYYY-MM-DD');
+        debugLog(`Default due date set to: ${newTask.dueDate}`);
       }
     } else {
+      debugLog(`Processing original date-based recurrence logic`);
       // For original date-based recurrence, calculate offset from original primary date
       const primaryDateField = RecurrenceUtils.getPrimaryDateField(task);
       const originalPrimaryDate = RecurrenceUtils.getDateFromTask(task, primaryDateField);
+      debugLog(`Primary date field: ${primaryDateField || 'none'}, Original primary date: ${originalPrimaryDate ? originalPrimaryDate.toISOString() : 'none'}`);
       
       if (originalPrimaryDate) {
         const daysDiff = moment(nextDate).diff(moment(originalPrimaryDate), 'days');
+        debugLog(`Days difference between next date and original primary date: ${daysDiff} days`);
         
         // Update all dates maintaining their relative relationships
         if (task.dueDate) {
           const originalDue = moment(task.dueDate);
           const newDue = originalDue.clone().add(daysDiff, 'days');
           newTask.dueDate = moment(RecurrenceUtils.ensureValidDate(newDue.toDate())).format('YYYY-MM-DD');
+          debugLog(`Updated due date: ${task.dueDate} -> ${newTask.dueDate} (${daysDiff} days offset)`);
         }
         
         if (task.scheduledDate) {
           const originalScheduled = moment(task.scheduledDate);
           const newScheduled = originalScheduled.clone().add(daysDiff, 'days');
           newTask.scheduledDate = moment(RecurrenceUtils.ensureValidDate(newScheduled.toDate())).format('YYYY-MM-DD');
+          debugLog(`Updated scheduled date: ${task.scheduledDate} -> ${newTask.scheduledDate} (${daysDiff} days offset)`);
         }
         
         if (task.startDate) {
           const originalStart = moment(task.startDate);
           const newStart = originalStart.clone().add(daysDiff, 'days');
           newTask.startDate = moment(RecurrenceUtils.ensureValidDate(newStart.toDate())).format('YYYY-MM-DD');
+          debugLog(`Updated start date: ${task.startDate} -> ${newTask.startDate} (${daysDiff} days offset)`);
         }
       } else {
+        debugLog(`No primary date found, setting next occurrence directly as due date`);
         // If no primary date, set the next occurrence directly as due date
         newTask.dueDate = moment(nextDate).format('YYYY-MM-DD');
+        debugLog(`Set due date to: ${newTask.dueDate}`);
       }
     }
     
+    debugLog(`Removing completion date from new task`);
     // Remove completion date from new task
     newTask.createdDate = undefined;
     
+    debugLog(`Recalculating urgency for new task`);
     // Recalculate urgency for the new task
     newTask.urgency = calculateUrgency(newTask);
+    debugLog(`New task urgency calculated: ${newTask.urgency}`);
     
+    debugLog(`Building task markdown for new task`);
     // Build the new task markdown
     newTask.originalMarkdown = RecurrenceUtils.buildTaskMarkdown(newTask);
+    debugLog(`New task markdown built: "${newTask.originalMarkdown}"`);
     
+    debugLog(`Returning completed new task for next occurrence`);
     return newTask;
   }
 
@@ -1229,10 +1410,25 @@ export function taskToString(task: Task): string {
  * @returns Promise with success status and message
  */
 export async function completeTask(id: string): Promise<{ success: boolean; message: string }> {
+  // Setup debug logging for task completion
+  const debugLog = (msg: string) => {
+    const timestamp = new Date().toISOString();
+    const logMsg = `${timestamp} [COMPLETE_TASK_INTERNAL] ${msg}\n`;
+    console.error(logMsg.trim());
+    try {
+      appendFileSync('/tmp/obsidian-mcp-debug.log', logMsg);
+    } catch (e) {
+      // Ignore file errors
+    }
+  };
+
   try {
+    debugLog(`Starting completeTask function with ID: ${id}`);
+    
     // Parse the task ID to extract file path and line number
     const lastColonIndex = id.lastIndexOf(':');
     if (lastColonIndex === -1) {
+      debugLog(`Invalid task ID format - no colon found: ${id}`);
       return { success: false, message: `Invalid task ID format: ${id}. Expected format: filePath:lineNumber` };
     }
     
@@ -1240,37 +1436,60 @@ export async function completeTask(id: string): Promise<{ success: boolean; mess
     const lineNumberStr = id.substring(lastColonIndex + 1);
     const lineNumber = parseInt(lineNumberStr, 10);
     
+    debugLog(`Parsed task ID - File: ${filePath}, Line: ${lineNumberStr} (parsed as ${lineNumber})`);
+    
     if (isNaN(lineNumber)) {
+      debugLog(`Line number parsing failed: ${lineNumberStr} is not a valid number`);
       return { success: false, message: `Invalid line number in task ID: ${lineNumberStr}` };
     }
     
     // Read the file content
+    debugLog(`Attempting to read file: ${filePath}`);
     const fs = await import('fs/promises');
     let fileContent: string;
     try {
       fileContent = await fs.readFile(filePath, 'utf-8');
+      debugLog(`Successfully read file, content length: ${fileContent.length} characters`);
     } catch (error) {
+      debugLog(`Failed to read file ${filePath}: ${error}`);
       return { success: false, message: `Failed to read file: ${filePath}. Error: ${error}` };
     }
     
     const lines = fileContent.split('\n');
+    debugLog(`File split into ${lines.length} lines`);
     
     // Check if line number is valid (1-based indexing)
     if (lineNumber < 1 || lineNumber > lines.length) {
+      debugLog(`Line number ${lineNumber} is out of range (file has ${lines.length} lines)`);
       return { success: false, message: `Line number ${lineNumber} is out of range for file with ${lines.length} lines` };
     }
     
     const targetLineIndex = lineNumber - 1; // Convert to 0-based indexing
     const originalLine = lines[targetLineIndex];
+    debugLog(`Target line (${lineNumber}): "${originalLine}"`);
     
     // Parse the task to get all its information
+    debugLog(`Parsing task line to extract task information...`);
     const task = parseTaskLine(originalLine, filePath, lineNumber);
     if (!task) {
+      debugLog(`Failed to parse line as task: "${originalLine}"`);
       return { success: false, message: `Line ${lineNumber} is not a valid task: ${originalLine}` };
     }
     
+    debugLog(`Task parsed successfully:`);
+    debugLog(`  - Description: "${task.description}"`);
+    debugLog(`  - Status: ${task.status} (symbol: ${task.statusSymbol})`);
+    debugLog(`  - Due date: ${task.dueDate || 'none'}`);
+    debugLog(`  - Scheduled: ${task.scheduledDate || 'none'}`);
+    debugLog(`  - Start: ${task.startDate || 'none'}`);  
+    debugLog(`  - Priority: ${task.priority || 'none'}`);
+    debugLog(`  - Recurrence: ${task.recurrence || 'none'}`);
+    debugLog(`  - Tags: [${task.tags.join(', ')}]`);
+    debugLog(`  - Urgency: ${task.urgency}`);
+    
     // Check if task is already completed
     if (task.status === 'complete') {
+      debugLog(`Task is already completed, aborting completion`);
       return { success: false, message: `Task is already completed: ${originalLine}` };
     }
     
@@ -1279,66 +1498,119 @@ export async function completeTask(id: string): Promise<{ success: boolean; mess
     const today = moment(completionDate).format('YYYY-MM-DD');
     const completionEmoji = ` ✅ ${today}`;
     
+    // Create a normalized completion date for recurrence calculation (start of day in local timezone)
+    const normalizedCompletionDate = moment(today, 'YYYY-MM-DD').toDate();
+    
+    debugLog(`Raw completion date: ${completionDate.toISOString()}`);
+    debugLog(`Formatted today string: ${today}`);
+    debugLog(`Normalized completion date for recurrence calc: ${normalizedCompletionDate.toISOString()}`);
+    debugLog(`Completion emoji: "${completionEmoji}"`);
+    
     // Replace the status character with 'x' and add completion date
     let updatedLine = originalLine.replace(TaskRegex.checkboxRegex, '[x]');
+    debugLog(`After status replacement: "${updatedLine}"`);
     
     // Add completion date if not already present
     if (!updatedLine.includes('✅')) {
       updatedLine += completionEmoji;
+      debugLog(`Added completion emoji: "${updatedLine}"`);
+    } else {
+      debugLog(`Completion emoji already present, skipping addition`);
     }
     
     // Update the line in the array
     lines[targetLineIndex] = updatedLine;
+    debugLog(`Updated line array at index ${targetLineIndex}`);
     
     let resultMessage = `Task completed successfully. Updated: ${originalLine} -> ${updatedLine}`;
     
     // Handle recurring tasks
     if (task.recurrence) {
+      debugLog(`Task has recurrence rule: "${task.recurrence}" - processing next occurrence...`);
       try {
-        const nextOccurrence = RecurrenceUtils.calculateNextOccurrence(task, completionDate);
+        debugLog(`Calling RecurrenceUtils.calculateNextOccurrence with normalized completion date: ${normalizedCompletionDate.toISOString()}`);
+        const nextOccurrence = RecurrenceUtils.calculateNextOccurrence(task, normalizedCompletionDate);
         
         if (nextOccurrence) {
+          debugLog(`Next occurrence calculated successfully:`);
+          debugLog(`  - New task ID: ${nextOccurrence.id}`);
+          debugLog(`  - Description: "${nextOccurrence.description}"`);
+          debugLog(`  - Status: ${nextOccurrence.status} (symbol: ${nextOccurrence.statusSymbol})`);
+          debugLog(`  - Due date: ${nextOccurrence.dueDate || 'none'}`);
+          debugLog(`  - Scheduled: ${nextOccurrence.scheduledDate || 'none'}`);
+          debugLog(`  - Start: ${nextOccurrence.startDate || 'none'}`);
+          debugLog(`  - Priority: ${nextOccurrence.priority || 'none'}`);
+          debugLog(`  - Recurrence: ${nextOccurrence.recurrence || 'none'}`);
+          debugLog(`  - Urgency: ${nextOccurrence.urgency}`);
+          debugLog(`  - Original markdown: "${nextOccurrence.originalMarkdown}"`);
+          
           // Insert the new recurring task below the completed task (after targetLineIndex)
           const insertIndex = targetLineIndex + 1;
+          debugLog(`Inserting new task at index ${insertIndex} (after completed task)`);
           
           // Extract indentation from the original line
           const indentMatch = originalLine.match(TaskRegex.indentationRegex);
           const indentation = indentMatch ? indentMatch[1] : '';
+          debugLog(`Extracted indentation: "${indentation}" (length: ${indentation.length})`);
           
           // Build the new task line with proper indentation
           let newTaskLine = nextOccurrence.originalMarkdown;
+          debugLog(`Initial new task line: "${newTaskLine}"`);
+          
           if (indentation && !newTaskLine.startsWith(indentation)) {
             // Replace the beginning of the line with the correct indentation
-            newTaskLine = newTaskLine.replace(/^[\s\t>]*/, '') ;
+            const originalIndent = newTaskLine.match(/^[\s\t>]*/)?.[0] || '';
+            newTaskLine = newTaskLine.replace(/^[\s\t>]*/, '');
             newTaskLine = indentation + newTaskLine;
+            debugLog(`Applied indentation: "${originalIndent}" -> "${indentation}"`);
+            debugLog(`Final new task line: "${newTaskLine}"`);
+          } else {
+            debugLog(`No indentation changes needed`);
           }
           
           // Insert the new task line
           lines.splice(insertIndex, 0, newTaskLine);
+          debugLog(`Inserted new task line at index ${insertIndex}, total lines now: ${lines.length}`);
           
           resultMessage += `\nCreated next recurring task: ${newTaskLine}`;
         } else {
+          debugLog(`RecurrenceUtils.calculateNextOccurrence returned null - unable to calculate next occurrence`);
           resultMessage += '\nNote: Could not calculate next occurrence for recurring task (check recurrence rule)';
         }
       } catch (recurrenceError) {
+        debugLog(`Error calculating next occurrence: ${recurrenceError}`);
+        if (recurrenceError instanceof Error && recurrenceError.stack) {
+          debugLog(`Recurrence error stack trace: ${recurrenceError.stack}`);
+        }
         resultMessage += `\nWarning: Error creating next occurrence: ${recurrenceError}`;
       }
+    } else {
+      debugLog(`Task has no recurrence rule, skipping recurring task logic`);
     }
     
     // Write the updated content back to the file
     const updatedContent = lines.join('\n');
+    debugLog(`Preparing to write updated content back to file (${updatedContent.length} characters)`);
+    
     try {
       await fs.writeFile(filePath, updatedContent, 'utf-8');
+      debugLog(`Successfully wrote updated content to file: ${filePath}`);
     } catch (error) {
+      debugLog(`Failed to write file ${filePath}: ${error}`);
       return { success: false, message: `Failed to write file: ${filePath}. Error: ${error}` };
     }
     
+    debugLog(`Task completion successful. Final result message: ${resultMessage}`);
     return { 
       success: true, 
       message: resultMessage
     };
     
   } catch (error) {
+    debugLog(`Unexpected error in completeTask: ${error}`);
+    if (error instanceof Error && error.stack) {
+      debugLog(`Error stack trace: ${error.stack}`);
+    }
     return { 
       success: false, 
       message: `Unexpected error completing task: ${error}` 

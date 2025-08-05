@@ -357,42 +357,74 @@ export async function handleQueryTasksRequest(args: any) {
 }
 
 export async function handleCompleteTaskRequest(args: any) {
+  // Setup debug logging for task completion
+  const debugLog = (msg: string) => {
+    const timestamp = new Date().toISOString();
+    const logMsg = `${timestamp} [COMPLETE_TASK] ${msg}\n`;
+    console.error(logMsg.trim());
+    try {
+      appendFileSync('/tmp/obsidian-mcp-debug.log', logMsg);
+    } catch (e) {
+      // Ignore file errors
+    }
+  };
+
   try {
+    debugLog(`Complete task request received with args: ${JSON.stringify(args)}`);
+    
     const parsed = CompleteTaskArgsSchema.safeParse(args);
     if (!parsed.success) {
+      debugLog(`Argument parsing failed: ${parsed.error}`);
       throw new Error(`Invalid arguments for complete_task: ${parsed.error}`);
     }
     
     // Extract file path from task ID to validate security
     const taskId = parsed.data.id;
+    debugLog(`Processing task ID: ${taskId}`);
+    
     const lastColonIndex = taskId.lastIndexOf(':');
     if (lastColonIndex === -1) {
+      debugLog(`Invalid task ID format - no colon found: ${taskId}`);
       throw new Error(`Invalid task ID format: ${taskId}. Expected format: filePath:lineNumber`);
     }
     
     const filePath = taskId.substring(0, lastColonIndex);
+    const lineNumber = taskId.substring(lastColonIndex + 1);
+    debugLog(`Extracted file path: ${filePath}, line number: ${lineNumber}`);
     
     // Validate that the file path is within the vault directory
     // First, make it relative to vault if it's absolute
     let relativePath = filePath;
     if (path.isAbsolute(filePath)) {
+      debugLog(`File path is absolute: ${filePath}`);
       if (!normalizePath(filePath).startsWith(vaultDirectory)) {
+        debugLog(`Security violation - file path outside vault: ${filePath} not in ${vaultDirectory}`);
         throw new Error(`Access denied - file path outside vault directory: ${filePath}`);
       }
       relativePath = path.relative(vaultDirectory, filePath);
+      debugLog(`Converted to relative path: ${relativePath}`);
+    } else {
+      debugLog(`File path is relative: ${filePath}`);
     }
     
     // Use existing security validation
+    debugLog(`Validating path security for: ${relativePath}`);
     await resolvePath(relativePath);
+    debugLog(`Path security validation passed`);
     
     // Complete the task
+    debugLog(`Starting task completion process for: ${taskId}`);
     const result = await completeTask(taskId);
     
+    debugLog(`Task completion result - Success: ${result.success}, Message: ${result.message}`);
+    
     if (result.success) {
+      debugLog(`Task completion successful, returning success response`);
       return {
         content: [{ type: "text", text: result.message }],
       };
     } else {
+      debugLog(`Task completion failed, returning error response`);
       return {
         content: [{ type: "text", text: `Error: ${result.message}` }],
         isError: true,
@@ -400,6 +432,10 @@ export async function handleCompleteTaskRequest(args: any) {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    debugLog(`Exception caught in handleCompleteTaskRequest: ${errorMessage}`);
+    if (error instanceof Error && error.stack) {
+      debugLog(`Stack trace: ${error.stack}`);
+    }
     return {
       content: [{ type: "text", text: `Error: ${errorMessage}` }],
       isError: true,

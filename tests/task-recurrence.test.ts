@@ -155,4 +155,279 @@ describe('Task Recurrence', () => {
     expect(lines[4]).toContain('#work #urgent'); // Tags
     expect(lines[4]).toContain('📅 2025-08-12'); // Next week's date
   });
+
+  // Helper function to find task by description content
+  function findTaskByDescription(content: string, description: string): { lineNumber: number; line: string } | null {
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes(description) && lines[i].trim().startsWith('- [')) {
+        return { lineNumber: i + 1, line: lines[i] }; // Convert to 1-based line numbers
+      }
+    }
+    return null;
+  }
+
+  // Second bundle: Monthly recurring patterns (5 tests)
+  describe('Monthly Recurring Patterns Bundle 2', () => {
+    it('should handle monthly task pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Monthly task 🔁 every month');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence one month later (Sept 5)
+      expect(updatedContent).toMatch(/Monthly task.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Monthly task.*\[ \].*2025-09-05/);
+    });
+
+    it('should handle every 2 months pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Every 2 months 🔁 every 2 months');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence two months later (Oct 5)
+      expect(updatedContent).toMatch(/Every 2 months.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Every 2 months.*\[ \].*2025-10-05/);
+    });
+
+    it('should handle first of month pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'First of month 🔁 every month on the 1st');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence on first of next month (Sept 1)
+      expect(updatedContent).toMatch(/First of month.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/First of month.*\[ \].*2025-09-01/);
+    });
+
+    it('should handle last Friday monthly pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Last Friday monthly 🔁 every month on the last Friday');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence on last Friday of next month (Sept 26)
+      expect(updatedContent).toMatch(/Last Friday monthly.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Last Friday monthly.*\[ \].*2025-09-26/);
+    });
+
+    it('should handle 2nd last Friday pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, '2nd last Friday 🔁 every month on the 2nd last Friday');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence on 2nd last Friday of next month (Sept 19)
+      expect(updatedContent).toMatch(/2nd last Friday.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/2nd last Friday.*\[ \].*2025-09-19/);
+    });
+  });
+
+  // Third bundle: Yearly and complex patterns (5 tests)
+  describe('Yearly and Complex Patterns Bundle 3', () => {
+    it('should handle yearly task pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Yearly task 🔁 every year');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence one year later (2026-08-05)
+      expect(updatedContent).toMatch(/Yearly task.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Yearly task.*\[ \].*2026-08-05/);
+    });
+
+    it('should handle January 15th yearly pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'January 15th 🔁 every January on the 15th');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence on Jan 15th next year (2026-01-15)
+      expect(updatedContent).toMatch(/January 15th.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/January 15th.*\[ \].*2026-01-15/);
+    });
+
+    it('should handle February last day yearly pattern', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'February last day 🔁 every February on the last');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence on last day of February next year (2026-02-28)
+      expect(updatedContent).toMatch(/February last day.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/February last day.*\[ \].*2026-02-28/);
+    });
+
+    it('should handle complex multi-date task (Mow the lawn)', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Mow the lawn 🔁 every 2 weeks');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence with all dates moved forward by 2 weeks
+      expect(updatedContent).toMatch(/Mow the lawn.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Mow the lawn.*\[ \].*⏳ 2025-08-28.*📅 2025-08-30/);
+    });
+
+    it('should handle complex multi-date task (Sweep floors)', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Sweep floors 🔁 every week');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence with all dates moved forward by 1 week
+      expect(updatedContent).toMatch(/Sweep floors.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Sweep floors.*\[ \].*⏳ 2025-08-20.*📅 2025-08-22/);
+    });
+  });
+
+  // Fourth bundle: Priority/Tags/Indented/Edge Cases (5 tests)
+  describe('Priority Tags Indented Edge Cases Bundle 4', () => {
+    it('should handle high priority recurring task with tags', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'High priority recurring #work #urgent');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should create next occurrence with priority and tags preserved
+      expect(updatedContent).toMatch(/High priority recurring.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/High priority recurring.*\[ \].*#work #urgent.*⏫.*2025-08-12/);
+    });
+
+    it('should handle indented daily recurring task', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Indented daily 🔁 every day');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should preserve indentation and create next occurrence
+      expect(updatedContent).toMatch(/  - \[x\] Indented daily.*✅/);
+      expect(updatedContent).toMatch(/  - \[ \] Indented daily.*2025-08-06/);
+    });
+
+    it('should handle double indented weekly recurring task', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Double indented 🔁 every week');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should preserve double indentation and create next occurrence
+      expect(updatedContent).toMatch(/    - \[x\] Double indented.*✅/);
+      expect(updatedContent).toMatch(/    - \[ \] Double indented.*2025-08-12/);
+    });
+
+    it('should handle edge case Feb 29 yearly recurrence', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Edge case Feb 29 🔁 every year');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should handle leap year edge case - move to Feb 28 in non-leap year 2025
+      expect(updatedContent).toMatch(/Edge case Feb 29.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Edge case Feb 29.*\[ \].*2025-02-28/);
+    });
+
+    it('should handle edge case Jan 31 monthly recurrence', async () => {
+      const initialContent = readFileSync(testFilePath, 'utf-8');
+      const taskInfo = findTaskByDescription(initialContent, 'Edge case Jan 31 monthly 🔁 every month');
+      expect(taskInfo).not.toBeNull();
+      
+      const result = await completeTask(`${testFilePath}:${taskInfo!.lineNumber}`);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Task completed successfully');
+      expect(result.message).toContain('Created next recurring task');
+      
+      const updatedContent = readFileSync(testFilePath, 'utf-8');
+      
+      // Should handle month-end edge case - move to Feb 28 (last day of February)
+      expect(updatedContent).toMatch(/Edge case Jan 31 monthly.*\[x\].*✅/);
+      expect(updatedContent).toMatch(/Edge case Jan 31 monthly.*\[ \].*2025-02-28/);
+    });
+  });
 });
