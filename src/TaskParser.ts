@@ -1260,12 +1260,12 @@ export function applyFilter(task: Task, filter: string): boolean {
   
   // Path/filename filters
   if (filter.startsWith('path includes')) {
-    const pathToFind = filter.split('includes')[1].trim();
+    const pathToFind = filter.split('includes')[1].trim().replace(/^["']|["']$/g, '');
     return task.filePath.toLowerCase().includes(pathToFind.toLowerCase());
   }
   
   if (filter.startsWith('path does not include')) {
-    const pathToExclude = filter.split('does not include')[1].trim();
+    const pathToExclude = filter.split('does not include')[1].trim().replace(/^["']|["']$/g, '');
     return !task.filePath.toLowerCase().includes(pathToExclude.toLowerCase());
   }
   
