@@ -1210,7 +1210,7 @@ export function applyFilter(task: Task, filter: string): boolean {
     if (filter === 'has due date') {
       return task.dueDate !== undefined;
     }
-    
+
     // Handle specific date patterns
     // Match patterns like "due 2024-02-07", "due on 2024-02-07"
     const dueDateMatch = filter.match(/^due\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})$/);
@@ -1218,14 +1218,14 @@ export function applyFilter(task: Task, filter: string): boolean {
       const targetDate = dueDateMatch[1];
       return task.dueDate === targetDate;
     }
-    
+
     // Match patterns like "due before 2024-02-07"
     const dueBeforeMatch = filter.match(/^due\s+before\s+(\d{4}-\d{2}-\d{2})$/);
     if (dueBeforeMatch) {
       const targetDate = dueBeforeMatch[1];
       return task.dueDate !== undefined && task.dueDate < targetDate;
     }
-    
+
     // Match patterns like "due after 2024-02-07"
     const dueAfterMatch = filter.match(/^due\s+after\s+(\d{4}-\d{2}-\d{2})$/);
     if (dueAfterMatch) {
@@ -1233,7 +1233,95 @@ export function applyFilter(task: Task, filter: string): boolean {
       return task.dueDate !== undefined && task.dueDate > targetDate;
     }
   }
-  
+
+  // Scheduled date filters
+  if (filter.startsWith('scheduled') || filter === 'has scheduled date' || filter === 'no scheduled date') {
+    if (filter === 'scheduled today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.scheduledDate === today;
+    }
+    if (filter === 'scheduled before today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.scheduledDate !== undefined && task.scheduledDate < today;
+    }
+    if (filter === 'scheduled after today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.scheduledDate !== undefined && task.scheduledDate > today;
+    }
+    if (filter === 'no scheduled date') {
+      return task.scheduledDate === undefined;
+    }
+    if (filter === 'has scheduled date') {
+      return task.scheduledDate !== undefined;
+    }
+
+    // Handle specific date patterns
+    // Match patterns like "scheduled 2024-02-07", "scheduled on 2024-02-07"
+    const scheduledDateMatch = filter.match(/^scheduled\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})$/);
+    if (scheduledDateMatch) {
+      const targetDate = scheduledDateMatch[1];
+      return task.scheduledDate === targetDate;
+    }
+
+    // Match patterns like "scheduled before 2024-02-07"
+    const scheduledBeforeMatch = filter.match(/^scheduled\s+before\s+(\d{4}-\d{2}-\d{2})$/);
+    if (scheduledBeforeMatch) {
+      const targetDate = scheduledBeforeMatch[1];
+      return task.scheduledDate !== undefined && task.scheduledDate < targetDate;
+    }
+
+    // Match patterns like "scheduled after 2024-02-07"
+    const scheduledAfterMatch = filter.match(/^scheduled\s+after\s+(\d{4}-\d{2}-\d{2})$/);
+    if (scheduledAfterMatch) {
+      const targetDate = scheduledAfterMatch[1];
+      return task.scheduledDate !== undefined && task.scheduledDate > targetDate;
+    }
+  }
+
+  // Start date filters
+  if (filter.startsWith('starts') || filter === 'has start date' || filter === 'no start date') {
+    if (filter === 'starts today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.startDate === today;
+    }
+    if (filter === 'starts before today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.startDate !== undefined && task.startDate < today;
+    }
+    if (filter === 'starts after today') {
+      const today = moment().format('YYYY-MM-DD');
+      return task.startDate !== undefined && task.startDate > today;
+    }
+    if (filter === 'no start date') {
+      return task.startDate === undefined;
+    }
+    if (filter === 'has start date') {
+      return task.startDate !== undefined;
+    }
+
+    // Handle specific date patterns
+    // Match patterns like "starts 2024-02-07", "starts on 2024-02-07"
+    const startsDateMatch = filter.match(/^starts\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})$/);
+    if (startsDateMatch) {
+      const targetDate = startsDateMatch[1];
+      return task.startDate === targetDate;
+    }
+
+    // Match patterns like "starts before 2024-02-07"
+    const startsBeforeMatch = filter.match(/^starts\s+before\s+(\d{4}-\d{2}-\d{2})$/);
+    if (startsBeforeMatch) {
+      const targetDate = startsBeforeMatch[1];
+      return task.startDate !== undefined && task.startDate < targetDate;
+    }
+
+    // Match patterns like "starts after 2024-02-07"
+    const startsAfterMatch = filter.match(/^starts\s+after\s+(\d{4}-\d{2}-\d{2})$/);
+    if (startsAfterMatch) {
+      const targetDate = startsAfterMatch[1];
+      return task.startDate !== undefined && task.startDate > targetDate;
+    }
+  }
+
   // Tag filters
   if (filter === 'no tags') {
     return !task.tags || task.tags.length === 0;

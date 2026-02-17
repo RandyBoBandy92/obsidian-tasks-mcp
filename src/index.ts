@@ -216,11 +216,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Search for tasks based on Obsidian Tasks query syntax. Each line is a filter with AND logic between lines. " +
           "SUPPORTED FILTERS: " +
           "Status: 'done', 'not done', 'cancelled', 'in progress' | " +
-          "Dates: 'due today', 'due before YYYY-MM-DD', 'due after YYYY-MM-DD', 'has due date', 'no due date' | " +
+          "Due Dates: 'due today', 'due before YYYY-MM-DD', 'due after YYYY-MM-DD', 'has due date', 'no due date' | " +
+          "Scheduled Dates: 'scheduled today', 'scheduled before YYYY-MM-DD', 'scheduled after YYYY-MM-DD', 'has scheduled date', 'no scheduled date' | " +
+          "Start Dates: 'starts today', 'starts before YYYY-MM-DD', 'starts after YYYY-MM-DD', 'has start date', 'no start date' | " +
           "Tags: 'has tags', 'no tags', 'tag includes #tagname', 'has tag #exacttag' | " +
           "Priority: 'priority is high', 'priority is medium', 'priority is low', 'priority is none' | " +
           "Path: 'path includes text', 'path does not include text' (excludes files/folders containing text) | " +
           "Description: 'description includes text' | " +
+          "Completion Date: 'description includes ✅ YYYY-MM-DD' (tasks completed on specific date) | " +
           "Urgency: 'urgency above 10', 'urgency below 5' | " +
           "BOOLEAN OPERATORS (case-sensitive): " +
           "'filter1 AND filter2' (both must match), 'filter1 OR filter2' (either matches), 'NOT filter' (negates filter) | " +

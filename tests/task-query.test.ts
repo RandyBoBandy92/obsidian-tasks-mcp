@@ -94,18 +94,76 @@ priority is high`;
   
   test('queryTasks with description filters should work correctly', async () => {
     const allTasks = await findAllTasks(testVaultPath);
-    
+
     // Tasks with specific text in description
     const tasksWithText = queryTasks(allTasks, 'description includes priority');
     expect(tasksWithText.length).toBeGreaterThan(0);
-    expect(tasksWithText.every(task => 
+    expect(tasksWithText.every(task =>
       task.description.toLowerCase().includes('priority')
     )).toBe(true);
-    
+
     // Tasks without specific text
     const tasksWithoutText = queryTasks(allTasks, 'description does not include priority');
-    expect(tasksWithoutText.every(task => 
+    expect(tasksWithoutText.every(task =>
       !task.description.toLowerCase().includes('priority')
+    )).toBe(true);
+  });
+
+  test('queryTasks with scheduled date filters should work correctly', async () => {
+    const allTasks = await findAllTasks(testVaultPath);
+
+    // Tasks with scheduled dates
+    const tasksWithScheduled = queryTasks(allTasks, 'has scheduled date');
+    expect(tasksWithScheduled.length).toBeGreaterThan(0);
+    expect(tasksWithScheduled.every(task => task.scheduledDate !== undefined)).toBe(true);
+
+    // Tasks without scheduled dates
+    const tasksWithoutScheduled = queryTasks(allTasks, 'no scheduled date');
+    expect(tasksWithoutScheduled.every(task => task.scheduledDate === undefined)).toBe(true);
+  });
+
+  test('queryTasks with scheduled date comparison filters should work correctly', async () => {
+    const allTasks = await findAllTasks(testVaultPath);
+
+    // Scheduled before specific date
+    const scheduledBefore = queryTasks(allTasks, 'scheduled before 2024-12-31');
+    expect(scheduledBefore.every(task =>
+      task.scheduledDate !== undefined && task.scheduledDate < '2024-12-31'
+    )).toBe(true);
+
+    // Scheduled after specific date
+    const scheduledAfter = queryTasks(allTasks, 'scheduled after 2024-01-01');
+    expect(scheduledAfter.every(task =>
+      task.scheduledDate !== undefined && task.scheduledDate > '2024-01-01'
+    )).toBe(true);
+  });
+
+  test('queryTasks with start date filters should work correctly', async () => {
+    const allTasks = await findAllTasks(testVaultPath);
+
+    // Tasks with start dates
+    const tasksWithStart = queryTasks(allTasks, 'has start date');
+    expect(tasksWithStart.length).toBeGreaterThan(0);
+    expect(tasksWithStart.every(task => task.startDate !== undefined)).toBe(true);
+
+    // Tasks without start dates
+    const tasksWithoutStart = queryTasks(allTasks, 'no start date');
+    expect(tasksWithoutStart.every(task => task.startDate === undefined)).toBe(true);
+  });
+
+  test('queryTasks with start date comparison filters should work correctly', async () => {
+    const allTasks = await findAllTasks(testVaultPath);
+
+    // Starts before specific date
+    const startsBefore = queryTasks(allTasks, 'starts before 2024-12-31');
+    expect(startsBefore.every(task =>
+      task.startDate !== undefined && task.startDate < '2024-12-31'
+    )).toBe(true);
+
+    // Starts after specific date
+    const startsAfter = queryTasks(allTasks, 'starts after 2024-01-01');
+    expect(startsAfter.every(task =>
+      task.startDate !== undefined && task.startDate > '2024-01-01'
     )).toBe(true);
   });
 });

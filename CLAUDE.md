@@ -62,7 +62,9 @@ Implements the official Obsidian Tasks urgency formula:
 ### Query System
 Supports filtering by:
 - Status: `done`, `not done`, `cancelled`, `in progress`
-- Dates: `due today`, `due before 2024-01-01`, `has due date`, `no due date`
+- Due Dates: `due today`, `due before 2024-01-01`, `due after 2024-01-01`, `has due date`, `no due date`
+- Scheduled Dates: `scheduled today`, `scheduled before 2024-01-01`, `scheduled after 2024-01-01`, `has scheduled date`, `no scheduled date`
+- Start Dates: `starts today`, `starts before 2024-01-01`, `starts after 2024-01-01`, `has start date`, `no start date`
 - Tags: `has tags`, `no tags`, `tag includes #work`, `has tag #specific`
 - Path: `path includes folder`, `path does not include Silver Icing` (excludes subdirectories)
 - Description: `description includes keyword`
